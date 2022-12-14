@@ -1,23 +1,28 @@
 module IssueRecurring
-  module CopyFromWithRecurrences
-    def copy_from(arg, options={})
-      super
+  # module CopyFromWithRecurrences
+  #   def copy_from(arg, options={})
+  #     super
 
-      unless options[:skip_recurrences]
-        self.recurrence_of = nil
+  #     unless options[:skip_recurrences]
+  #       self.recurrence_of = nil
 
-        if Setting.plugin_issue_recurring[:copy_recurrences]
-          self.recurrences = @copied_from.recurrences.map(&:dup)
-        end
-      end
+  #       if Setting.plugin_issue_recurring[:copy_recurrences]
+  #         self.recurrences = @copied_from.recurrences.map(&:dup)
+  #       end
+  #     end
 
-      self
-    end
-  end
+  #     self
+  #   end
+  # end
 
   module IssuePatch
+    extend ActiveSupport::Concern
+    included do
+      alias_method :copy_from_without_recurring, :copy_from
+      alias_method :copy_from, :copy_from_with_recurring
+    end
     Issue.class_eval do
-      prepend CopyFromWithRecurrences
+      # prepend CopyFromWithRecurrences
 
       has_many :recurrences, class_name: 'IssueRecurrence', dependent: :destroy
 
@@ -33,6 +38,20 @@ module IssueRecurring
       r = self.recurrence_of.recurrences.find_by(last_issue: self)
       return if r.nil?
       r.update!(last_issue: r.issue.recurrence_copies.last)
+    end
+
+    def copy_from_with_recurring(arg, options = nil)
+      copy_from_without_recurring arg, **options
+
+      unless options[:skip_recurrences]
+        self.recurrence_of = nil
+
+        if Setting.plugin_issue_recurring[:copy_recurrences]
+          self.recurrences = @copied_from.recurrences.map(&:dup)
+        end
+      end
+
+      self
     end
 
     def default_reassign
