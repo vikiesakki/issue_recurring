@@ -20,11 +20,6 @@ bg:
               #  затваряне могат модифицират задача на място'
               reopen_requires_close_date_based: 'only recurrences dependent on close date
                 can reopen issue'
-              # TODO: update translation, previous version saved for reference
-              #date_anchor_requires_reopen: 'Цикличности, базирани на фиксирани дати могат да
-              #  се използват само за модификации на място'
-              date_anchor_requires_reopen: 'recurrences based on fixed date can only be used
-                for issue reopening'
             creation_mode:
               # TODO: update translation, previous version saved for reference
               #only_one_reopen: 'допълнителни цикличности на място са позволени, само ако
@@ -46,6 +41,8 @@ bg:
                 създадена за задача без крайна дата'
             date_limit:
               not_in_future: 'Крайната дата на цикличност трябва да бъде в бъдещето'
+              not_after_anchor_date: 'user provided limit date has to be later than the
+                fixed date the recurrence is based on'
   issue_recurrences_menu_caption: 'Цикличност'
   warning_renew: "*Warning!* Can't renew recurrence referring to issue #%{id}: %{errors}."
   # changed from: "<b>Внимание</b>: не е възможно да се поднови цикличност #%{id}: %{errors}."
@@ -181,7 +178,7 @@ bg:
           months: 'месец'
         until: 'и повтаряне до'
         limit_modes:
-          forever: '<b>завинаги</b>'
-          fixed_date: '<b>фиксирана дата (включително):</b>'
-          count: '<b>броят на повторенията</b> достигне:'
+          no_limit: '<b>завинаги</b>'
+          date_limit: '<b>фиксирана дата (включително):</b>'
+          count_limit: '<b>броят на повторенията</b> достигне:'
         recurrence: 'повторение'

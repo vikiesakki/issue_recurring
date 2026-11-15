@@ -34,29 +34,44 @@ class IssueRecurrencesSystemTest < IssueRecurringSystemTestCase
     super
   end
 
-  def test_create_recurrence
-    @issue1.update!(due_date: Date.current)
+  def test_create_recurrence_from_randomized_params
+    @issue1.update!(random_dates)
+
+    # Verify that every valid random recurrence can be entered into form
     create_recurrence
   end
 
+  def test_create_recurrence_from_randomized_form
+    @issue1.update!(random_dates)
+
+    # Verify that every recurrence that can be entered into form is valid.
+    # Implicitly tests form fields hiding depending on recurrence setting selection.
+    create_recurrence { fill_in_randomly }
+  end
+
   def test_update_recurrence
-    @issue1.update!(start_date: Date.current - 4.days, due_date: Date.current)
-    ir = create_recurrence
-    update_recurrence ir do
-      all('select', visible: :all).each do |s|
-        s.all('option:not(:checked)').sample&.select_option
-      end
-      all('input[type=number]').each { |i| i.fill_in with: rand(11) }
-      # NOTE: for now date fields - if visible - are left with default values
+    @issue1.update!(random_dates)
+    r = create_recurrence
+
+    # Verify that every valid random update can be entered into form
+    update_recurrence r
+
+    # Verify that every update that can be entered into form is valid
+    update_recurrence(r) { fill_in_randomly }
+
+    # Verify that update with no change yields the same recurrence
+    assert_no_changes 'r.reload.attributes' do
+      update_recurrence(r) { }
     end
   end
 
   def test_destroy_recurrence
-    @issue1.update!(due_date: Date.current)
+    @issue1.update!(random_dates)
     destroy_recurrence(create_recurrence)
   end
 
   def test_show_issue_recurrences
+    # TODO: randomize # of recurrences 0..N
     visit issue_path(@issue1)
     within_issue_recurrences_panel do
       assert_equal @issue1.recurrences.count, all("tr").length
@@ -160,7 +175,7 @@ class IssueRecurrencesSystemTest < IssueRecurringSystemTestCase
 
     ir1 = create_recurrence(issue: @issue1,
                             creation_mode: :copy_first, anchor_to_start: true,
-                           anchor_mode: :last_issue_fixed)
+                            anchor_mode: :last_issue_fixed)
     ir2 = create_recurrence(issue: @issue2,
                             creation_mode: :reopen, anchor_to_start: true,
                             anchor_mode: :last_issue_flexible)
@@ -260,6 +275,4 @@ class IssueRecurrencesSystemTest < IssueRecurringSystemTestCase
       destroy_recurrence(ir)
     end
   end
-
-  # TODO: test form fields hiding depending on recurrence setting selection
 end

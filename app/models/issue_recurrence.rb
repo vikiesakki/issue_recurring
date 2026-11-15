@@ -14,7 +14,7 @@ class IssueRecurrence < ActiveRecord::Base
     first_issue_fixed: 0,
     last_issue_fixed: 1,
     last_issue_flexible: 2,
-    last_issue_flexible_on_delay: 3,
+    last_issue_flexible_on_delay: 3, # TODO: rename to _flexible_if_late ?
     last_issue_fixed_after_close: 4,
     date_fixed_after_close: 5,
   }
@@ -44,6 +44,7 @@ class IssueRecurrence < ActiveRecord::Base
   JOURNAL_MODES = [:never, :always, :on_reopen]
   AHEAD_MODES = [:days, :weeks, :months, :years]
 
+  # Don't check privileges on :renew
   validate on: [:create, :update] do
     errors.add(:issue, :insufficient_privileges) unless editable?
   end
@@ -79,11 +80,6 @@ class IssueRecurrence < ActiveRecord::Base
     if: -> { creation_mode == 'reopen' },
     message: :reopen_requires_close_date_based
   }
-  validates :anchor_mode, exclusion: {
-    in: ['date_fixed_after_close'],
-    if: -> { creation_mode != 'reopen' },
-    message: :date_anchor_requires_reopen
-  }
   validates :anchor_to_start, inclusion: [true, false]
   validates :anchor_date, absence: {unless: -> { anchor_mode == 'date_fixed_after_close' }},
     presence: {if: -> { anchor_mode == 'date_fixed_after_close' }}
@@ -115,6 +111,9 @@ class IssueRecurrence < ActiveRecord::Base
   validates :delay_multiplier, numericality: {greater_than_or_equal_to: 0, only_integer: true}
   validates :include_subtasks, inclusion: [true, false]
   validates :date_limit, absence: {if: -> { count_limit.present? } }
+  validate if: -> { date_limit.present? && date_fixed_after_close? } do
+    errors.add(:date_limit, :not_after_anchor_date) unless anchor_date < date_limit
+  end
   validate on: :create, if: -> { date_limit.present? } do
     errors.add(:date_limit, :not_in_future) unless Date.current < date_limit
   end
@@ -202,14 +201,29 @@ class IssueRecurrence < ActiveRecord::Base
       "#{count_limit_info}".html_safe
   end
 
+  def limit_mode
+    return case
+      when self.date_limit.present?
+        :date_limit
+      when self.count_limit.present?
+        :count_limit
+      else
+        :no_limit
+      end
+  end
+
   def initialize_dup(other)
     self.last_issue = nil
     self.count = 0
     super
   end
 
+  # TODO: make methods private as appropriate
+
   # Advance 'dates' according to recurrence mode and adjustment (+/- # of periods).
   # Return advanced 'dates' or nil if recurrence limit reached.
+  # TODO: change internals so that adj == -1 is never used and [adj -1 -> adj 0].
+  # Current choice is not intuitive.
   def advance(adj=0, **dates)
     adj_count = self.count + adj
     adj_count = [self.count, adj_count].min if self.date_fixed_after_close?
@@ -432,9 +446,11 @@ class IssueRecurrence < ActiveRecord::Base
         end
       end
 
+      # Renewal should happen irrespective of author's (= User.current) privileges.
+      # No user-assignable attribues are/should be changed.
       self.last_issue = new_issue
       self.count += 1
-      self.save!
+      self.save!(context: :renew)
     end
 
     User.current = prev_user
@@ -578,18 +594,16 @@ class IssueRecurrence < ActiveRecord::Base
       end
       yield(ref_dates) unless new_dates.nil? || (predict && ref_issue.closed?)
     when :date_fixed_after_close
-      adj = 0
       closed_date = predict ? Date.current : ref_issue.closed_on.to_date
       barrier_date = [
         closed_date,
         ref_issue.start_date || ref_issue.due_date || ref_dates[:start] || ref_dates[:due]
       ].max
-      new_dates = self.advance(-1, **ref_dates)
-      while (new_dates[:start] || new_dates[:due]) <= barrier_date
+      adj = -1
+      begin
         new_dates = self.advance(adj, **ref_dates)
-        break if new_dates.nil?
         adj += 1
-      end
+      end until new_dates.nil? || ((new_dates[:start] || new_dates[:due]) > barrier_date)
       yield(new_dates) unless new_dates.nil? || (predict && ref_issue.closed?)
     end
   end

@@ -16,7 +16,8 @@ class IssueRecurringIntegrationTestCase < Redmine::IntegrationTest
     assert_nil session[:user_id]
   end
 
-  def create_recurrence(issue=issues(:issue_01), **attributes)
+  # TODO: replace uses of create_recurrence with create_random_recurrence
+  def create_recurrence(issue = issues(:issue_01), **attributes)
     attributes[:anchor_mode] ||= :first_issue_fixed
     attributes[:mode] ||= :weekly
     attributes[:multiplier] ||= 1
@@ -25,10 +26,20 @@ class IssueRecurringIntegrationTestCase < Redmine::IntegrationTest
       assert_response :ok
       assert_empty assigns(:recurrence).errors
     end
-    IssueRecurrence.last
+    assigns(:recurrence)
   end
 
-  def create_recurrence_should_fail(issue=issues(:issue_01), **attributes)
+  def create_random_recurrence(issue = issues(:issue_01), **defaults)
+    attributes = random_recurrence(issue, **defaults)
+    assert_difference 'IssueRecurrence.count', 1 do
+      post "#{issue_recurrences_path(issue)}.js", params: {recurrence: attributes}
+      assert_response :ok
+      assert_empty assigns(:recurrence).errors
+    end
+    assigns(:recurrence)
+  end
+
+  def create_recurrence_should_fail(issue = issues(:issue_01), **attributes)
     attributes[:anchor_mode] ||= :first_issue_fixed
     attributes[:mode] ||= :weekly
     attributes[:multiplier] ||= 1

@@ -25,6 +25,7 @@ class IssueRecurringSystemTestCase < ApplicationSystemTestCase
 
   Capybara.configure do |config|
     config.save_path = './tmp/screenshots/'
+    config.default_max_wait_time = 0
   end
 
   self.fixture_path = File.expand_path('../fixtures/', __FILE__)
@@ -44,34 +45,76 @@ class IssueRecurringSystemTestCase < ApplicationSystemTestCase
     assert_link t(:label_login)
   end
 
-  def within_issue_recurrences_panel(&block)
+  def within_issue_recurrences_panel
     panel_label = t('issues.issue_recurrences_hook.recurrences')
     within :xpath, "//div[p[contains(string(), '#{panel_label}')]]" do
       yield
     end
   end
 
+  def fill_in_form(attributes)
+    helper_attrs = {}
+    attributes.keys.grep(/_limit$/) { |k| helper_attrs[:limit_mode] = k.to_sym }
+
+    field = first(:field)
+    begin
+      id = field[:id].delete_prefix('recurrence_').to_sym
+      key = helper_attrs[id] || attributes[id]
+      unless key.nil?
+        if field.tag_name == 'select'
+          helper_method = "#{id}_options".to_sym
+          value = send(helper_method).to_h.invert[key]
+          field.select value
+        else
+          field.fill_in with: key
+        end
+      end
+      field = field.find(:xpath, 'following-sibling::*[self::input or self::select]',
+                         match: :first)
+    rescue Capybara::ElementNotFound
+      break
+    end while true
+  end
+
+  def fill_in_randomly
+    # SELECT visibility may change due to selection of specific OPTIONS
+    all('select', visible: :all).filter(&:visible?).each do |s|
+      s.all('option').sample&.select_option
+    end
+    all('input[type=number]').each do |i|
+      min = i[:min].to_i || 0
+      i.fill_in with: rand([min..min, (min+1)..5, 6..1000].sample)
+    end
+    all('input[type=date]').each do |i|
+      i.fill_in with: i[:min].present? ? i[:min].to_date + random_datespan : random_date
+    end
+  end
+
+  # Create recurrence by filling out the form with:
+  # * attributes, filled with missing required keys if necessary,
+  # * block,
+  # or randomly generated attributes when no attributes or block given.
   def create_recurrence(issue: issues(:issue_01), **attributes)
     t_base = 'issues.recurrences.form'
     recurrence = nil
 
-    attributes[:anchor_mode] ||= :first_issue_fixed
-    attributes[:mode] ||= :weekly
-    attributes[:multiplier] ||= 1
+    # TODO: replace `attributes` argument with `defaults` and always generate random
+    if attributes.empty?
+      attributes = random_recurrence(issue) unless block_given?
+    else
+      attributes[:anchor_mode] ||= :first_issue_fixed
+      attributes[:mode] ||= :weekly
+      attributes[:multiplier] ||= 1
+    end
 
     visit issue_path(issue)
     within_issue_recurrences_panel do
       assert_difference ['all("tr").length', 'IssueRecurrence.count'], 1 do
         click_link t(:button_add)
-        attributes.each do |k, v|
-          helper_method = "#{k}_options".to_sym
-          if respond_to?(helper_method)
-            v = send(helper_method).to_h { |v,k| [k,v] }[v]
-            select strip_tags(v), from: "recurrence_#{k}"
-          else
-            fill_in "recurrence_#{k}", with: v
-          end
-        end
+
+        fill_in_form attributes
+        yield if block_given?
+
         click_button t(:button_submit)
       end
 
@@ -81,50 +124,42 @@ class IssueRecurringSystemTestCase < ApplicationSystemTestCase
       assert_selector :xpath,
         "//tr[td[contains(string(), '#{strip_tags(recurrence.to_s)}')]]"
       assert_no_selector '#new-recurrence *', visible: :all
+      attributes = attributes.map { |k,v| [k.to_s, v.is_a?(Symbol) ? v.to_s : v] }.to_h
+      assert_equal attributes, recurrence.attributes.extract!(*attributes.keys)
     end
     assert_selector 'div#flash_notice', exact_text: t('issue_recurrences.create.success')
-
-    attributes.each do |attribute, value|
-      value = value.to_s if value.is_a? Symbol
-      assert_equal value, recurrence.send(attribute)
-    end
 
     recurrence
   end
 
-  def update_recurrence(recurrence, **attributes, &block)
+  def update_recurrence(recurrence, **attributes)
     t_base = 'issues.recurrences.form'
-    attributes.stringify_keys!
+
+    if attributes.empty? && !block_given?
+      attributes = random_recurrence(recurrence.issue)
+    end
 
     visit issue_path(recurrence.issue)
     within_issue_recurrences_panel do
-      assert_changes 'recurrence.attributes' do
+      assert_no_difference ['all("tr").length', 'IssueRecurrence.count'] do
         within :xpath, "//tr[td[contains(string(), '#{strip_tags(recurrence.to_s)}')]]" do
           click_link t(:button_edit)
         end
 
-        attributes.each do |k, v|
-          helper_method = "#{k}_options".to_sym
-          if respond_to?(helper_method)
-            v = send(helper_method).to_h { |v,k| [k,v] }[v]
-            select strip_tags(v), from: "recurrence_#{k}"
-          else
-            fill_in "recurrence_#{k}", with: v
-          end
-        end
-
-        yield
+        fill_in_form attributes
+        yield if block_given?
 
         click_button t(:button_submit)
-        recurrence.reload
-
-        # status_code not supported by Selenium
-        assert_current_path issue_path(recurrence.issue)
-        assert_no_selector '#new-recurrence *', visible: :all
-        assert_selector :xpath,
-          "//tr[td[contains(string(), '#{strip_tags(recurrence.to_s)}')]]"
-        assert_equal attributes, recurrence.attributes.extract!(*attributes.keys)
       end
+
+      recurrence.reload
+      # status_code not supported by Selenium
+      assert_current_path issue_path(recurrence.issue)
+      assert_selector :xpath,
+        "//tr[td[contains(string(), '#{strip_tags(recurrence.to_s)}')]]"
+      assert_no_selector '#new-recurrence *', visible: :all
+      attributes = attributes.map { |k,v| [k.to_s, v.is_a?(Symbol) ? v.to_s : v] }.to_h
+      assert_equal attributes, recurrence.attributes.extract!(*attributes.keys)
     end
     assert_selector 'div#flash_notice', exact_text: t('issue_recurrences.update.success')
 
