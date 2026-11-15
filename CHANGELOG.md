@@ -2,6 +2,9 @@
 
 ## 1.8 [coming soon]
 
+Compatibility:
+* Redmine 6/7 (Rails 8.1, Ruby 3.3, Zeitwerk-only loading); Redmine < 6 no longer supported
+
 New features:
 * recurrence editing ([#11](https://it.michalczyk.pro/issues/11))
 * successful operations on issue page confirmed by flash messages

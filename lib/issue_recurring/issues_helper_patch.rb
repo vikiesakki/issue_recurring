@@ -92,12 +92,12 @@ module IssueRecurring
     end
 
     def edit_button(r)
-      link_to l(:button_edit), edit_issue_recurrence_path(r), remote: true,
+      link_to sprite_icon('edit', l(:button_edit)), edit_issue_recurrence_path(r), remote: true,
         class: 'icon icon-edit'
     end
 
     def delete_button(r)
-      link_to l(:button_delete), issue_recurrence_path(r), method: :delete, remote: true,
+      link_to sprite_icon('del', l(:button_delete)), issue_recurrence_path(r), method: :delete, remote: true,
         class: 'icon icon-del'
     end
   end

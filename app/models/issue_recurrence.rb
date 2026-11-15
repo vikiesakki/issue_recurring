@@ -1,16 +1,17 @@
 class IssueRecurrence < ActiveRecord::Base
   include Redmine::Utils::DateCalculation
+  include Redmine::I18n
 
   belongs_to :issue, validate: true
   belongs_to :last_issue, class_name: 'Issue', validate: true
 
-  enum creation_mode: {
+  enum :creation_mode, {
     copy_first: 0,
     copy_last: 1,
     reopen: 2
   }
 
-  enum anchor_mode: {
+  enum :anchor_mode, {
     first_issue_fixed: 0,
     last_issue_fixed: 1,
     last_issue_flexible: 2,
@@ -20,7 +21,7 @@ class IssueRecurrence < ActiveRecord::Base
   }
   FLEXIBLE_ANCHORS = anchor_modes.keys.select { |m| m.include?('_flexible') }
 
-  enum mode: {
+  enum :mode, {
     daily: 0,
     daily_wday: 1,
     weekly: 100,
@@ -35,7 +36,7 @@ class IssueRecurrence < ActiveRecord::Base
   WDAY_MODES = modes.keys.select { |m| m.include?('_wday') }
   MONTHLY_MODES = modes.keys.select { |m| m.include?('monthly_') }
 
-  enum delay_mode: {
+  enum :delay_mode, {
     days: 0,
     weeks: 1,
     months: 2

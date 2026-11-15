@@ -1,36 +1,34 @@
 module IssueRecurring
-  # module CopyFromWithRecurrences
-  #   def copy_from(arg, options={})
-  #     super
-
-  #     unless options[:skip_recurrences]
-  #       self.recurrence_of = nil
-
-  #       if Setting.plugin_issue_recurring[:copy_recurrences]
-  #         self.recurrences = @copied_from.recurrences.map(&:dup)
-  #       end
-  #     end
-
-  #     self
-  #   end
-  # end
-
   module IssuePatch
     extend ActiveSupport::Concern
+
     included do
-      alias_method :copy_from_without_recurring, :copy_from
-      alias_method :copy_from, :copy_from_with_recurring
-    end
-    Issue.class_eval do
-      # prepend CopyFromWithRecurrences
+      prepend CopyFromWithRecurrences
 
       has_many :recurrences, class_name: 'IssueRecurrence', dependent: :destroy
 
-      belongs_to :recurrence_of, class_name: 'Issue', validate: true
+      belongs_to :recurrence_of, class_name: 'Issue', optional: true, validate: true
       has_many :recurrence_copies, class_name: 'Issue', foreign_key: 'recurrence_of_id',
         dependent: :nullify
 
       after_destroy :substitute_if_last_issue
+    end
+
+    module CopyFromWithRecurrences
+      def copy_from(arg, options = {})
+        options ||= {}
+        super(arg, options)
+
+        unless options[:skip_recurrences]
+          self.recurrence_of = nil
+
+          if Setting.plugin_issue_recurring[:copy_recurrences]
+            self.recurrences = @copied_from.recurrences.map(&:dup)
+          end
+        end
+
+        self
+      end
     end
 
     def substitute_if_last_issue
@@ -40,24 +38,9 @@ module IssueRecurring
       r.update!(last_issue: r.issue.recurrence_copies.last)
     end
 
-    def copy_from_with_recurring(arg, options = nil)
-      copy_from_without_recurring arg, **options
-
-      unless options[:skip_recurrences]
-        self.recurrence_of = nil
-
-        if Setting.plugin_issue_recurring[:copy_recurrences]
-          self.recurrences = @copied_from.recurrences.map(&:dup)
-        end
-      end
-
-      self
-    end
-
     def default_reassign
       self.assigned_to = nil
       default_assign
     end
   end
 end
-

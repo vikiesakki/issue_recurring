@@ -1,10 +1,11 @@
 module IssueRecurring
   module SettingsControllerPatch
-    SettingsController.class_eval do
+    extend ActiveSupport::Concern
+
+    included do
       before_action :save_issue_recurring_settings, only: [:plugin],
         if: -> { params[:id] == 'issue_recurring' && request.post? }
     end
-
     def save_issue_recurring_settings
       settings = {}
 
